@@ -19,6 +19,7 @@ Macros and Defines
 /********************************************************************************
 Function Prototypes
 ********************************************************************************/
+int16_t get_rotation_gyro(void);
 void port_init(void);
 void adc_init(void);
 uint16_t analog_read(uint8_t channel);
@@ -47,10 +48,14 @@ int main(void) {
 
     // Main loop
     while (true) {
-        uint16_t ref = analog_read(6);
-        uint16_t zout = analog_read(7);
-        printf("Reference: %u\tZOut: %u\tDiff: %d\r\n", ref, zout, zout-ref);
+        printf("Rotation: %d\r\n", get_rotation_gyro());
     }
+}
+/********************************************************************************
+Device helpers
+********************************************************************************/
+int16_t get_rotation_gyro(void) {
+    return analog_read(7) - analog_read(6);
 }
 
 /********************************************************************************
@@ -69,7 +74,7 @@ void port_init(void) {
 
 void adc_init(void) {
     ADMUX &= ~0xE0;         // AREF reference voltage, right adjusted result
-    ADCSRA = 0x87;          // ADC enabled, no auto-trigger, aclock = sysclock/2
+    ADCSRA = 0x87;          // ADC enabled, no auto-trigger, aclock = sysclock/128
 }
 
 /********************************************************************************
