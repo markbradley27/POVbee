@@ -19,6 +19,9 @@ Macros and Defines
 /********************************************************************************
 Function Prototypes
 ********************************************************************************/
+void port_init(void);
+void adc_init(void);
+uint16_t analog_read(uint8_t channel);
 void usart_init( uint16_t ubrr);
 void usart_putchar(char data);
 char usart_getchar(void);
@@ -35,18 +38,49 @@ static FILE mystdout = FDEV_SETUP_STREAM(usart_putchar_printf, NULL, _FDEV_SETUP
 Main
 ********************************************************************************/
 int main(void) {
-    // Initialize USART
+    // Initialize
+    port_init();
+    adc_init();
     usart_init(MYUBRR);
     stdout = &mystdout;
 
-    // Turn on green light
-    DDRC |= (1 << PC4);
-    PORTC &= ~(1 << PC4);
 
     // Main loop
     while (true) {
-        printf("Hi %s!\r\n", "world from printf");
+        uint16_t ref = analog_read(6);
+        uint16_t zout = analog_read(7);
+        printf("Reference: %u\tZOut: %u\tDiff: %d\r\n", ref, zout, zout-ref);
     }
+}
+
+/********************************************************************************
+Device initialization
+********************************************************************************/
+void port_init(void) {
+    // Turn on green light
+    PORTC &= ~(1 << PC4);
+    DDRC |= (1 << PC4);
+
+    // Gyro pins
+    PORTC &= ~(1 << PC0);
+    PORTC &= ~(1 << PC1);
+    DDRC |= 0x03;
+}
+
+void adc_init(void) {
+    ADMUX &= ~0xE0;         // AREF reference voltage, right adjusted result
+    ADCSRA = 0x87;          // ADC enabled, no auto-trigger, aclock = sysclock/2
+}
+
+/********************************************************************************
+ADC Related
+********************************************************************************/
+uint16_t analog_read(uint8_t channel) {
+    ADMUX = (ADMUX & 0xF0) | channel;
+    ADCSRA |= 0x40;
+    while(!(ADCSRA & 0x10));
+    ADCSRA |= 0x10;
+    return ADC;
 }
 
 /********************************************************************************
