@@ -20,8 +20,15 @@ Macros and Defines
 Function Prototypes
 ********************************************************************************/
 int16_t get_rotation_gyro(void);
+void accel_init(void);
+int16_t accel_read_axis(uint8_t);
+int16_t accel_read_x(void);
+int16_t accel_read_y(void);
+int16_t accel_read_z(void);
 void port_init(void);
 void adc_init(void);
+void spim_init(void);
+void spi_tx(char data);
 uint16_t analog_read(uint8_t channel);
 void usart_init( uint16_t ubrr);
 void usart_putchar(char data);
@@ -39,23 +46,68 @@ static FILE mystdout = FDEV_SETUP_STREAM(usart_putchar_printf, NULL, _FDEV_SETUP
 Main
 ********************************************************************************/
 int main(void) {
-    // Initialize
+    // AVR init
     port_init();
     adc_init();
+    spim_init();
     usart_init(MYUBRR);
     stdout = &mystdout;
 
+    // Device init
+    accel_init();
 
     // Main loop
     while (true) {
-        printf("Rotation: %d\r\n", get_rotation_gyro());
+        printf("Rotation: %3d\t", get_rotation_gyro());
+        printf("Accel: %3d,\t%3d,\t%3d\r\n", accel_read_x(), accel_read_y(), accel_read_z());
     }
 }
 /********************************************************************************
 Device helpers
 ********************************************************************************/
+// Gyro
 int16_t get_rotation_gyro(void) {
     return analog_read(7) - analog_read(6);
+}
+
+// Accel
+void accel_init(void) {
+    // Pull CS low
+    PORTB &= ~(1<<PB2);
+
+    // Set to measure mode
+    spi_tx(0x2D);
+    spi_tx(0x08);
+
+    // Drive CS high
+    PORTB |= (1<<PB2);
+}
+int16_t accel_read_axis(uint8_t start_reg) {
+    int16_t accel_axis = 0x00;
+
+    // Pull CS low
+    PORTB &= ~(1<<PB2);
+
+    // Read x data registers
+    spi_tx(0x80 | 0x40 | start_reg);
+    spi_tx(0x00);
+    accel_axis |= SPDR;
+    spi_tx(0x00);
+    accel_axis |= SPDR << 8;
+
+    // Drive CS high
+    PORTB |= (1<<PB2);
+
+    return accel_axis;
+}
+int16_t accel_read_x(void) {
+    return accel_read_axis(0x32);
+}
+int16_t accel_read_y(void) {
+    return accel_read_axis(0x34);
+}
+int16_t accel_read_z(void) {
+    return accel_read_axis(0x36);
 }
 
 /********************************************************************************
@@ -77,6 +129,12 @@ void adc_init(void) {
     ADCSRA = 0x87;          // ADC enabled, no auto-trigger, aclock = sysclock/128
 }
 
+void spim_init(void) {
+    DDRB = (1<<PB2)|(1<<PB3)|(1<<PB5);     // Set CS, MOSI, and SCK output, all others input
+    PORTB |= (1<<PB2);                     // Set CS high initially
+    SPCR = (1<<SPE)|(1<<MSTR)|(1<<CPOL)|(1<<CPHA)|(1<<SPR0);    // Enable SPI, Master, set clock rate fck/16
+}
+
 /********************************************************************************
 ADC Related
 ********************************************************************************/
@@ -86,6 +144,14 @@ uint16_t analog_read(uint8_t channel) {
     while(!(ADCSRA & 0x10));
     ADCSRA |= 0x10;
     return ADC;
+}
+
+/********************************************************************************
+SPI Related
+********************************************************************************/
+void spi_tx(char data) {
+    SPDR = data;
+    while(!(SPSR & (1<<SPIF)));
 }
 
 /********************************************************************************
