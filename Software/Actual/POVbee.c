@@ -64,7 +64,7 @@ int main(void) {
         int16_t rotation = get_rotation_gyro();
 
         printf("Rotation: %3d\t", rotation);
-        printf("Accel: %3d,\t%3d,\t%3d\r\n", accel_read_x(), accel_read_y(), accel_read_z());
+        printf("Accel: %3d,\t%3d,\t%3d\r\n", accel_read_axis('x'), accel_read_axis('y'), accel_read_axis('z'));
 
         if (rotation < -15) {
             rgb[0].g = 64;
@@ -113,32 +113,29 @@ void accel_init(void) {
     spi_tx(0x0B);
     PORTB |= (1<<PB2);
 }
-int16_t accel_read_axis(uint8_t start_reg) {
-    int16_t accel_axis = 0x00;
+int16_t accel_read_axis(uint8_t axis) {
+    int16_t axis_accel = 0x00;
+    switch(axis) {
+        case 'x': axis = 0x32; break;
+        case 'y': axis = 0x34; break;
+        case 'z': axis = 0x36; break;
+        default: return 0;
+    }
 
     // Pull CS low
     PORTB &= ~(1<<PB2);
 
     // Read x data registers
-    spi_tx(0x80 | 0x40 | start_reg);
+    spi_tx(0x80 | 0x40 | axis);
     spi_tx(0x00);
-    accel_axis |= SPDR;
+    axis_accel |= SPDR;
     spi_tx(0x00);
-    accel_axis |= SPDR << 8;
+    axis_accel |= SPDR << 8;
 
     // Drive CS high
     PORTB |= (1<<PB2);
 
-    return accel_axis;
-}
-int16_t accel_read_x(void) {
-    return accel_read_axis(0x32);
-}
-int16_t accel_read_y(void) {
-    return accel_read_axis(0x34);
-}
-int16_t accel_read_z(void) {
-    return accel_read_axis(0x36);
+    return axis_accel;
 }
 
 /********************************************************************************
