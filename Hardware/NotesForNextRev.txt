@@ -1,0 +1,7 @@
+Notes for next POVbee board:
+	Add reset button
+	Break-out tx and rx
+	Break-out power rails
+	Jumper for power sources? Something smarter, usb+battery might equal smoke
+	Some way to measure battery voltage?
+	BlueSmirf header
