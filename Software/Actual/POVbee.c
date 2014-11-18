@@ -8,13 +8,15 @@ Includes
 #include <stdio.h>
 #include <string.h>
 #include <avr/pgmspace.h>
+#include "WS2811.h"
  
 /********************************************************************************
 Macros and Defines
 ********************************************************************************/
-#define F_CPU 16000000
-#define BAUD 9600
+#define F_CPU 16000000UL
+#define BAUD 9600UL
 #define MYUBRR F_CPU/16/BAUD-1
+DEFINE_WS2811_FN(WS2811RGB, PORTC, 2)
  
 /********************************************************************************
 Function Prototypes
@@ -41,6 +43,7 @@ int usart_putchar_printf(char var, FILE *stream);
 Global Variables
 ********************************************************************************/
 static FILE mystdout = FDEV_SETUP_STREAM(usart_putchar_printf, NULL, _FDEV_SETUP_WRITE);
+RGB_t rgb[1] = {{0, 0, 0}};
 
 /********************************************************************************
 Main
@@ -56,17 +59,30 @@ int main(void) {
     // Device init
     accel_init();
 
-    PORTB &= ~(1<<PB2);
-    spi_tx(0x80 | 0x00);
-    spi_tx(0x00);
-    printf("Device id: %x\r\n", SPDR);
-    PORTB |= (1<<PB2);
-    usart_getchar();
-
     // Main loop
     while (true) {
-        printf("Rotation: %3d\t", get_rotation_gyro());
+        int16_t rotation = get_rotation_gyro();
+
+        printf("Rotation: %3d\t", rotation);
         printf("Accel: %3d,\t%3d,\t%3d\r\n", accel_read_x(), accel_read_y(), accel_read_z());
+
+        if (rotation < -15) {
+            rgb[0].g = 64;
+            rgb[0].b = 0;
+            rgb[0].r = 0;
+        }
+        else if (rotation > 15) {
+            rgb[0].g = 0;
+            rgb[0].b = 64;
+            rgb[0].r = 0;
+        }
+        else {
+            rgb[0].g = 0;
+            rgb[0].b = 0;
+            rgb[0].r = 64;
+        }
+
+        WS2811RGB(rgb, ARRAYLEN(rgb));
     }
 }
 /********************************************************************************
@@ -137,6 +153,10 @@ void port_init(void) {
     PORTC &= ~(1 << PC0);
     PORTC &= ~(1 << PC1);
     DDRC |= 0x03;
+
+    // Pixel pin
+    DDRC |= (1<<PC2);
+    PORTC &= ~(1<<PC2);
 }
 
 void adc_init(void) {
