@@ -56,6 +56,13 @@ int main(void) {
     // Device init
     accel_init();
 
+    PORTB &= ~(1<<PB2);
+    spi_tx(0x80 | 0x00);
+    spi_tx(0x00);
+    printf("Device id: %x\r\n", SPDR);
+    PORTB |= (1<<PB2);
+    usart_getchar();
+
     // Main loop
     while (true) {
         printf("Rotation: %3d\t", get_rotation_gyro());
@@ -72,14 +79,22 @@ int16_t get_rotation_gyro(void) {
 
 // Accel
 void accel_init(void) {
-    // Pull CS low
+    // Set to standby mode
     PORTB &= ~(1<<PB2);
+    spi_tx(0x2D);
+    spi_tx(0x00);
+    PORTB |= (1<<PB2);
 
     // Set to measure mode
+    PORTB &= ~(1<<PB2);
     spi_tx(0x2D);
     spi_tx(0x08);
+    PORTB |= (1<<PB2);
 
-    // Drive CS high
+    // Set to +/- 16g, full-resolution
+    PORTB &= ~(1<<PB2);
+    spi_tx(0x31);
+    spi_tx(0x0B);
     PORTB |= (1<<PB2);
 }
 int16_t accel_read_axis(uint8_t start_reg) {
@@ -132,7 +147,7 @@ void adc_init(void) {
 void spim_init(void) {
     DDRB = (1<<PB2)|(1<<PB3)|(1<<PB5);     // Set CS, MOSI, and SCK output, all others input
     PORTB |= (1<<PB2);                     // Set CS high initially
-    SPCR = (1<<SPE)|(1<<MSTR)|(1<<CPOL)|(1<<CPHA)|(1<<SPR0);    // Enable SPI, Master, set clock rate fck/16
+    SPCR = (1<<SPE)|(1<<MSTR)|(1<<CPOL)|(1<<CPHA)|(1<<SPR1)|(1<<SPR0);    // Enable SPI, Master, set clock rate fck/128
 }
 
 /********************************************************************************
