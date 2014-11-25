@@ -24,9 +24,7 @@ Function Prototypes
 int16_t get_rotation_gyro(void);
 void accel_init(void);
 int16_t accel_read_axis(uint8_t);
-int16_t accel_read_x(void);
-int16_t accel_read_y(void);
-int16_t accel_read_z(void);
+int16_t accel_read_smoothed_axis(uint8_t, int16_t);
 void port_init(void);
 void adc_init(void);
 void spim_init(void);
@@ -43,7 +41,7 @@ int usart_putchar_printf(char var, FILE *stream);
 Global Variables
 ********************************************************************************/
 static FILE mystdout = FDEV_SETUP_STREAM(usart_putchar_printf, NULL, _FDEV_SETUP_WRITE);
-RGB_t rgb[1] = {{0, 0, 0}};
+RGB_t rgb[4] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
 
 /********************************************************************************
 Main
@@ -59,27 +57,43 @@ int main(void) {
     // Device init
     accel_init();
 
+    // Variable declaration
+    int16_t rotation = 0;
+    int16_t accel_x = 0;
+    int16_t accel_y = 0;
+    int16_t accel_z = 0;
+
     // Main loop
     while (true) {
-        int16_t rotation = get_rotation_gyro();
+        rotation = get_rotation_gyro();
+        accel_x = accel_read_smoothed_axis('x', accel_x);
+        accel_y = accel_read_axis('y');
+        accel_z = accel_read_axis('z');
 
         printf("Rotation: %3d\t", rotation);
-        printf("Accel: %3d,\t%3d,\t%3d\r\n", accel_read_axis('x'), accel_read_axis('y'), accel_read_axis('z'));
+        printf("Accel: %3d,\t%3d,\t%3d\r\n", accel_x, accel_y, accel_z);
 
+        uint8_t i;
         if (rotation < -15) {
-            rgb[0].g = 64;
-            rgb[0].b = 0;
-            rgb[0].r = 0;
+            for (i = 0; i < 4; ++i) {
+                rgb[i].g = 255;
+                rgb[i].b = 0;
+                rgb[i].r = 0;
+            }
         }
         else if (rotation > 15) {
-            rgb[0].g = 0;
-            rgb[0].b = 64;
-            rgb[0].r = 0;
+            for (i = 0; i < 4; ++i) {
+                rgb[i].g = 0;
+                rgb[i].b = 255;
+                rgb[i].r = 0;
+            }
         }
         else {
-            rgb[0].g = 0;
-            rgb[0].b = 0;
-            rgb[0].r = 64;
+            for (i = 0; i < 4; ++i) {
+                rgb[i].g = 0;
+                rgb[i].b = 0;
+                rgb[i].r = 255;
+            }
         }
 
         WS2811RGB(rgb, ARRAYLEN(rgb));
@@ -158,6 +172,7 @@ void port_init(void) {
 
 void adc_init(void) {
     ADMUX &= ~0xE0;         // AREF reference voltage, right adjusted result
+    // TODO: Try speeding this back up
     ADCSRA = 0x87;          // ADC enabled, no auto-trigger, aclock = sysclock/128
 }
 
