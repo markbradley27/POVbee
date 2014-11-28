@@ -8,6 +8,7 @@ Includes
 #include <stdio.h>
 #include <string.h>
 #include <avr/pgmspace.h>
+#include <avr/interrupt.h>
 #include "WS2811.h"
  
 /********************************************************************************
@@ -24,10 +25,10 @@ Function Prototypes
 int16_t get_rotation_gyro(void);
 void accel_init(void);
 int16_t accel_read_axis(uint8_t);
-int16_t accel_read_smoothed_axis(uint8_t, int16_t);
 void port_init(void);
 void adc_init(void);
 void spim_init(void);
+void timer_init(void);
 void spi_tx(char data);
 uint16_t analog_read(uint8_t channel);
 void usart_init( uint16_t ubrr);
@@ -42,6 +43,7 @@ Global Variables
 ********************************************************************************/
 static FILE mystdout = FDEV_SETUP_STREAM(usart_putchar_printf, NULL, _FDEV_SETUP_WRITE);
 RGB_t rgb[4] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+uint32_t milis = 0;
 
 /********************************************************************************
 Main
@@ -52,6 +54,8 @@ int main(void) {
     adc_init();
     spim_init();
     usart_init(MYUBRR);
+    timer_init();
+    sei();              // Enable interrupts
     stdout = &mystdout;
 
     // Device init
@@ -62,16 +66,24 @@ int main(void) {
     int16_t accel_x = 0;
     int16_t accel_y = 0;
     int16_t accel_z = 0;
+    uint8_t seconds = 0;
 
     // Main loop
     while (true) {
         rotation = get_rotation_gyro();
-        accel_x = accel_read_smoothed_axis('x', accel_x);
+        accel_x = accel_read_axis('x');
         accel_y = accel_read_axis('y');
         accel_z = accel_read_axis('z');
 
+        // Roughly estimate seconds
+        if (milis >= 1000) {
+            ++seconds;
+            milis = 0;
+        }
+
         printf("Rotation: %3d\t", rotation);
-        printf("Accel: %3d,\t%3d,\t%3d\r\n", accel_x, accel_y, accel_z);
+        printf("Accel: %3d,\t%3d,\t%3d\t", accel_x, accel_y, accel_z);
+        printf("Seconds: %3u\r\n", seconds);
 
         uint8_t i;
         if (rotation < -15) {
@@ -99,6 +111,7 @@ int main(void) {
         WS2811RGB(rgb, ARRAYLEN(rgb));
     }
 }
+
 /********************************************************************************
 Device helpers
 ********************************************************************************/
@@ -152,6 +165,15 @@ int16_t accel_read_axis(uint8_t axis) {
     return axis_accel;
 }
 
+// Timer
+uint32_t get_micros(void) {
+    return (milis * 1000) + ((uint32_t)(TCNT0 - 6) * 4);
+}
+void timer_reset(void) {
+    TCNT0 = 6;
+    milis = 0;
+}
+
 /********************************************************************************
 Device initialization
 ********************************************************************************/
@@ -172,14 +194,28 @@ void port_init(void) {
 
 void adc_init(void) {
     ADMUX &= ~0xE0;         // AREF reference voltage, right adjusted result
-    // TODO: Try speeding this back up
     ADCSRA = 0x87;          // ADC enabled, no auto-trigger, aclock = sysclock/128
 }
 
 void spim_init(void) {
     DDRB = (1<<PB2)|(1<<PB3)|(1<<PB5);     // Set CS, MOSI, and SCK output, all others input
     PORTB |= (1<<PB2);                     // Set CS high initially
+    // TODO: Try speeding this back up
     SPCR = (1<<SPE)|(1<<MSTR)|(1<<CPOL)|(1<<CPHA)|(1<<SPR1)|(1<<SPR0);    // Enable SPI, Master, set clock rate fck/128
+}
+
+void timer_init(void) {
+    TIMSK0 = (1<<TOIE0);            // Enable timer overflow interrupt for timer0
+    TCNT0 = 0x00;                   // Set timer0 counter initial value to 0
+    TCCR0B = (1<<CS00)|(1<<CS01);   // Start timer0 with 1/64 prescaler
+}
+
+/********************************************************************************
+Interrupt Service Routines
+********************************************************************************/
+ISR(TIMER0_OVF_vect) {
+    ++milis;
+    TCNT0 = 6;
 }
 
 /********************************************************************************
